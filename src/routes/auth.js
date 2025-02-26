@@ -60,14 +60,14 @@ router.post('/loginUser', async (req, res) => {
 
     // Check for user email
     const user = await User.findOne({ userEmail });
-    
+
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Check if password matches
     const isMatch = await user.matchPassword(userPassword);
-    
+
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
@@ -90,31 +90,30 @@ router.post('/loginUser', async (req, res) => {
 router.post('/forgotUserPassword', async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
     // Generate reset token
     const resetToken = crypto.randomBytes(20).toString('hex');
-    
+
     // Set token and expiration on user account
     user.resetPasswordToken = resetToken;
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
-    
+
     // Create email transport
     const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: process.env.EMAIL_PORT,
+      service: process.env.SERVICE || 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       }
     });
-    
+
     // Compose email
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
     const message = {
@@ -126,10 +125,10 @@ router.post('/forgotUserPassword', async (req, res) => {
       ${resetUrl}
       If you did not request this, please ignore this email and your password will remain unchanged.`
     };
-    
+
     // Send email
     await transporter.sendMail(message);
-    
+
     res.status(200).json({ message: 'Password reset email sent' });
   } catch (error) {
     console.error(error);
@@ -144,23 +143,23 @@ router.post('/resetUserPassword/:token', async (req, res) => {
   try {
     const { password } = req.body;
     const { token } = req.params;
-    
+
     // Find user by reset token and check if expired
     const user = await User.findOne({
       resetPasswordToken: token,
       resetPasswordExpires: { $gt: Date.now() }
     });
-    
+
     if (!user) {
       return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
     }
-    
+
     // Update password and clear reset token fields
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
-    
+
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (error) {
     console.error(error);
@@ -174,11 +173,11 @@ router.post('/resetUserPassword/:token', async (req, res) => {
 router.post('/logoutUser', protect, async (req, res) => {
   try {
     const token = req.headers.authorization.split(' ')[1];
-    
+
     // Get token expiration from JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const tokenExpiry = new Date(decoded.exp * 1000); // Convert Unix timestamp to Date object
-    
+
     // Add token to blacklist
     await BlacklistedToken.create({
       tokenString: token,
